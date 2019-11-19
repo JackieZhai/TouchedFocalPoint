@@ -1,0 +1,8 @@
+apt undate
+apt install unzip
+apt install python3-dev g++
+apt install python3-pip
+pip3 install numpy
+pip3 install scikit-build
+pip3 install kimimaro
+apt install htop

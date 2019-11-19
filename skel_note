@@ -1,0 +1,124 @@
+class Skeleton(object):
+  """
+  A stick figure representation of a 3D object. 
+
+  vertices: [[x,y,z], ...] float32
+  edges: [[v1,v2], ...] uint32
+  radii: [r1,r2,...] float32 distance from vertex to nearest boudary
+  vertex_types: [t1,t2,...] uint8 SWC vertex types
+  segid: numerical ID
+  transform: 3x4 scaling and translation matrix (ie homogenous coordinates) 
+    that represents the transformaton from voxel to physical coordinates.
+    
+    Example Identity Matrix:
+    [
+      [1, 0, 0, 0],
+      [0, 1, 0, 0],
+      [0, 0, 1, 0]
+    ]
+
+  space: 'voxel', 'physical', or user choice (but other choices 
+    make .physical_space() and .voxel_space() stop working as they
+    become meaningless.)
+  
+  extra_attributes: You can specify additional per vertex
+    data attributes (the most common are radii and vertex_type) 
+    that are present in reading Precomputed binary skeletons using
+    the following format:
+    [
+        {
+          "id": "radius",
+          "data_type": "uint8",
+          "num_components": 1,
+        }
+    ]
+
+    These attributes will become object properties. i.e. skel.radius
+
+    Note that for backwards compatibility, skel.radius is treated 
+    specially and is synonymous with skel.radii.
+  """
+
+
+
+
+
+
+
+
+
+
+def skeletonize(
+    all_labels, teasar_params=DEFAULT_TEASAR_PARAMS, anisotropy=(1,1,1),
+    object_ids=None, dust_threshold=1000, cc_safety_factor=1,
+    progress=False, fix_branching=True, in_place=False, 
+    fix_borders=True, parallel=1, parallel_chunk_size=100,
+    extra_targets_before=[], extra_targets_after=[],
+  ):
+  """
+  Skeletonize all non-zero labels in a given 2D or 3D image.
+
+  Required:
+    all_labels: a 2D or 3D numpy array of integer type (signed or unsigned) 
+
+  Optional:
+    anisotropy: the physical dimensions of each axis (e.g. 4nm x 4nm x 40nm)
+    object_ids: If not none, zero out all labels other than those specified here.
+    teasar_params: {
+      scale: during the "rolling ball" invalidation phase, multiply 
+          the DBF value by this.
+      const: during the "rolling ball" invalidation phase, this 
+          is the minimum radius in chosen physical units (i.e. nm).
+      soma_detection_threshold: if object has a DBF value larger than this, 
+          root will be placed at largest DBF value and special one time invalidation
+          will be run over that root location (see soma_invalidation scale)
+          expressed in chosen physical units (i.e. nm) 
+      pdrf_scale: scale factor in front of dbf, used to weight dbf over euclidean distance (higher to pay more attention to dbf) (default 5000)
+      pdrf_exponent: exponent in dbf formula on distance from edge, faster if factor of 2 (default 16)
+      soma_invalidation_scale: the 'scale' factor used in the one time soma root invalidation (default .5)
+      soma_invalidation_const: the 'const' factor used in the one time soma root invalidation (default 0)
+                             (units in chosen physical units (i.e. nm))
+    }
+    dust_threshold: don't bother skeletonizing connected components smaller than
+      this many voxels.
+    cc_safety_factor: Value between 0 and 1 that scales the size of the 
+      disjoint set maps in connected_components. 1 is guaranteed to work,
+      but is probably excessive and corresponds to every pixel being a different
+      label. Use smaller values to save some memory.
+
+    extra_targets_before: List of x,y,z voxel coordinates that will all 
+      be traced to from the root regardless of whether those points have 
+      been invalidated. These targets will be applied BEFORE the regular
+      target selection algorithm is run.      
+
+      e.g. [ (x,y,z), (x,y,z) ]
+
+    extra_targets_after: Same as extra_targets_before but the additional
+      targets will be applied AFTER the usual algorithm runs.
+
+    progress: if true, display a progress bar
+    fix_branching: When enabled, zero the edge weights by of previously 
+      traced paths. This causes branch points to occur closer to 
+      the actual path divergence. However, there is a performance penalty
+      associated with this as dijkstra's algorithm is computed once per a path
+      rather than once per a skeleton.
+    in_place: if true, allow input labels to be modified to reduce
+      memory usage and possibly improve performance.
+    fix_borders: ensure that segments touching the border place a 
+      skeleton endpoint in a predictable place to make merging 
+      adjacent chunks easier.
+    parallel: number of subprocesses to use.
+      <= 0: Use multiprocessing.count_cpu() 
+         1: Only use the main process.
+      >= 2: Use this number of subprocesses.
+    parallel_chunk_size: default number of skeletons to 
+      submit to each parallel process before returning results,
+      updating the progress bar, and submitting a new task set. 
+      Setting this number too low results in excess IPC overhead,
+      and setting it too high can result in task starvation towards
+      the end of a job and infrequent progress bar updates. If the
+      chunk size is set higher than num tasks // parallel, that number
+      is used instead.
+
+  Returns: { $segid: cloudvolume.PrecomputedSkeleton, ... }
+  """
